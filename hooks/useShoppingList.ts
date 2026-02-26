@@ -44,10 +44,20 @@ export function useShoppingList() {
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
 
-  return {
+    function clearChecked() {
+     setItems((prev) => prev.map((it) => (it.checked ? { ...it, checked: false } : it)));
+    }
+
+    function clearAll() {
+    setItems([]);
+    }
+
+    return {
     items,
     addItem,
     toggleItem,
     removeItem,
+    clearChecked,
+    clearAll,
   };
 }
