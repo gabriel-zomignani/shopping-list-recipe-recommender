@@ -9,7 +9,8 @@ import { getRecipeSuggestions } from "@/lib/recipes/match";
 import type { Recipe } from "@/types/recipe";
 
 export default function Home() {
-  const { items, addItem, toggleItem, removeItem, clearChecked, clearAll } = useShoppingList();
+  const { items, addItem, toggleItem, removeItem, clearChecked, clearAll } =
+    useShoppingList();
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -25,9 +26,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-8 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold">Shopping List → Recipe Recommender</h1>
+      <h1 className="text-3xl font-bold">Shopping List -&gt; Recipe Recommender</h1>
       <p className="mt-2 text-sm text-gray-600">
-        Tick items you already have at home. We’ll generate recipes from checked
+        Tick items you already have at home. We&apos;ll generate recipes from checked
         items.
       </p>
 
@@ -35,11 +36,7 @@ export default function Home() {
         <h2 className="text-xl font-semibold">My Shopping List</h2>
 
         <AddItemForm onAdd={addItem} />
-        <ShoppingList
-          items={items}
-          onToggle={toggleItem}
-          onRemove={removeItem}
-        />
+        <ShoppingList items={items} onToggle={toggleItem} onRemove={removeItem} />
 
         <button
           onClick={handleGenerate}

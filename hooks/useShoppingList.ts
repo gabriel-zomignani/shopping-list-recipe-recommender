@@ -10,15 +10,18 @@ function makeId() {
 }
 
 export function useShoppingList() {
-  const [items, setItems] = useState<ShoppingItem[]>([]);
-
-  // Load from localStorage (only on mount)
-  useEffect(() => {
+  const [items, setItems] = useState<ShoppingItem[]>(() => {
+    if (typeof window === "undefined") return [];
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      setItems(JSON.parse(stored));
+    if (!stored) return [];
+
+    try {
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
     }
-  }, []);
+  });
 
   // Save whenever items change
   useEffect(() => {
@@ -44,15 +47,17 @@ export function useShoppingList() {
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
 
-    function clearChecked() {
-     setItems((prev) => prev.map((it) => (it.checked ? { ...it, checked: false } : it)));
-    }
+  function clearChecked() {
+    setItems((prev) =>
+      prev.map((it) => (it.checked ? { ...it, checked: false } : it))
+    );
+  }
 
-    function clearAll() {
+  function clearAll() {
     setItems([]);
-    }
+  }
 
-    return {
+  return {
     items,
     addItem,
     toggleItem,
