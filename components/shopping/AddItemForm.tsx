@@ -18,16 +18,16 @@ export default function AddItemForm({ onAdd }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 mt-4">
+    <form onSubmit={handleSubmit} className="mt-5 flex gap-2">
       <input
-        className="w-full rounded-md border px-3 py-2"
+        className="w-full rounded-xl border border-[var(--border-soft)] bg-white px-4 py-2.5 text-sm text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--brand-red)] focus:ring-2 focus:ring-[var(--brand-red)]/20"
         placeholder="Add an item (e.g., eggs)"
         value={value}
         onChange={(e) => setValue(e.target.value)}
       />
       <button
         type="submit"
-        className="rounded-md bg-black text-white px-4 py-2"
+        className="rounded-xl bg-[var(--brand-green)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_6px_16px_rgba(23,128,58,0.3)] transition hover:bg-[var(--brand-green-strong)]"
       >
         Add
       </button>

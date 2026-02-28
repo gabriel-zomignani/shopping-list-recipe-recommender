@@ -9,6 +9,31 @@ function makeId() {
   return crypto.randomUUID();
 }
 
+function normalizeName(name: string) {
+  return name.trim().toLowerCase();
+}
+
+function mergeItems(existingList: ShoppingItem[], incomingNames: string[]) {
+  const existingNames = new Set(existingList.map((item) => normalizeName(item.name)));
+  const newItems: ShoppingItem[] = [];
+
+  for (const rawName of incomingNames) {
+    const name = rawName.trim();
+    if (!name) continue;
+
+    const normalized = normalizeName(name);
+    if (existingNames.has(normalized)) continue;
+
+    existingNames.add(normalized);
+    newItems.push({ id: makeId(), name, checked: false });
+  }
+
+  return {
+    merged: newItems.length > 0 ? [...newItems, ...existingList] : existingList,
+    addedCount: newItems.length,
+  };
+}
+
 export function useShoppingList() {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -32,10 +57,17 @@ export function useShoppingList() {
   }, [items, hydrated]);
 
   function addItem(name: string) {
-    setItems((prev) => [
-      { id: makeId(), name, checked: false },
-      ...prev,
-    ]);
+    setItems((prev) => mergeItems(prev, [name]).merged);
+  }
+
+  function addItems(names: string[]) {
+    let addedCount = 0;
+    setItems((prev) => {
+      const result = mergeItems(prev, names);
+      addedCount = result.addedCount;
+      return result.merged;
+    });
+    return addedCount;
   }
 
   function toggleItem(id: string) {
@@ -64,6 +96,7 @@ export function useShoppingList() {
     items,
     hydrated,
     addItem,
+    addItems,
     toggleItem,
     removeItem,
     clearChecked,
