@@ -10,23 +10,26 @@ function makeId() {
 }
 
 export function useShoppingList() {
-  const [items, setItems] = useState<ShoppingItem[]>(() => {
-    if (typeof window === "undefined") return [];
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
+  const [items, setItems] = useState<ShoppingItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
+  // Load once on mount (client only)
+  useEffect(() => {
     try {
-      const parsed = JSON.parse(stored);
-      return Array.isArray(parsed) ? parsed : [];
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) setItems(JSON.parse(stored));
     } catch {
-      return [];
+      // ignore bad/corrupted storage
+    } finally {
+      setHydrated(true);
     }
-  });
+  }, []);
 
   // Save whenever items change
   useEffect(() => {
+    if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
+  }, [items, hydrated]);
 
   function addItem(name: string) {
     setItems((prev) => [
@@ -59,6 +62,7 @@ export function useShoppingList() {
 
   return {
     items,
+    hydrated,
     addItem,
     toggleItem,
     removeItem,

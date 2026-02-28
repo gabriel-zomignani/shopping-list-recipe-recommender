@@ -9,13 +9,13 @@ import { getRecipeSuggestions } from "@/lib/recipes/match";
 import type { Recipe } from "@/types/recipe";
 
 export default function Home() {
-  const { items, addItem, toggleItem, removeItem, clearChecked, clearAll } =
+  const { items, hydrated, addItem, toggleItem, removeItem, clearChecked, clearAll } =
     useShoppingList();
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const checkedCount = items.filter((i) => i.checked).length;
+  const checkedCount = hydrated ? items.filter((i) => i.checked).length : 0;
 
   async function handleGenerate() {
     setIsGenerating(true);
@@ -36,11 +36,15 @@ export default function Home() {
         <h2 className="text-xl font-semibold">My Shopping List</h2>
 
         <AddItemForm onAdd={addItem} />
-        <ShoppingList items={items} onToggle={toggleItem} onRemove={removeItem} />
+        {!hydrated ? (
+          <p className="mt-4 text-gray-600">Loading your list...</p>
+        ) : (
+          <ShoppingList items={items} onToggle={toggleItem} onRemove={removeItem} />
+        )}
 
         <button
           onClick={handleGenerate}
-          disabled={checkedCount === 0 || isGenerating}
+          disabled={!hydrated || checkedCount === 0 || isGenerating}
           className="mt-6 rounded-md bg-black text-white px-4 py-2 disabled:opacity-50"
         >
           {isGenerating ? "Generating..." : "Generate Recipes"}
