@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { ShoppingItem } from "@/types/shopping";
 import ShoppingListItem from "./ShoppingListItem";
 
@@ -43,10 +44,10 @@ export default function ShoppingList({
     );
   }
 
-  const sortedItems = [...items].sort(compareByStatusThenName);
+  const sortedItems = useMemo(() => [...items].sort(compareByStatusThenName), [items]);
 
   return (
-    <ul className="mt-5 space-y-2.5">
+    <ul className="mt-5 max-h-[40vh] space-y-2.5 overflow-y-auto pr-1">
       {sortedItems.map((item) => (
         <ShoppingListItem
           key={item.id}

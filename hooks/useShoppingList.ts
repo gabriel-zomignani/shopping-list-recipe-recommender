@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { ShoppingItem } from "@/types/shopping";
+import { useCallback, useEffect, useState } from "react";
+import { isShoppingItemArray } from "@/lib/storage/schemas";
+import { readVersionedStorage, writeVersionedStorage } from "@/lib/storage/versioned";
+import type { ShoppingItem, ShoppingItemSource } from "@/types/shopping";
 
 const STORAGE_KEY = "shopping-list";
+
+type NewShoppingItem = {
+  name: string;
+  quantity?: number;
+  unit?: string;
+  source?: ShoppingItemSource;
+};
 
 function makeId() {
   return crypto.randomUUID();
@@ -13,23 +22,41 @@ function normalizeName(name: string) {
   return name.trim().toLowerCase();
 }
 
-function mergeItems(existingList: ShoppingItem[], incomingNames: string[]) {
-  const existingNames = new Set(existingList.map((item) => normalizeName(item.name)));
+function sanitizeShoppingItem(item: ShoppingItem): ShoppingItem {
+  const normalizedName = item.normalizedName ?? normalizeName(item.name);
+  return {
+    ...item,
+    source: item.source ?? "manual",
+    normalizedName,
+  };
+}
+
+function mergeItems(existingList: ShoppingItem[], incoming: NewShoppingItem[]) {
+  const sanitizedExisting = existingList.map(sanitizeShoppingItem);
+  const existingNames = new Set(sanitizedExisting.map((item) => item.normalizedName));
   const newItems: ShoppingItem[] = [];
 
-  for (const rawName of incomingNames) {
-    const name = rawName.trim();
+  for (const incomingItem of incoming) {
+    const name = incomingItem.name.trim();
     if (!name) continue;
 
     const normalized = normalizeName(name);
     if (existingNames.has(normalized)) continue;
 
     existingNames.add(normalized);
-    newItems.push({ id: makeId(), name, checked: false });
+    newItems.push({
+      id: makeId(),
+      name,
+      quantity: incomingItem.quantity,
+      unit: incomingItem.unit,
+      source: incomingItem.source ?? "manual",
+      normalizedName: normalized,
+      checked: false,
+    });
   }
 
   return {
-    merged: newItems.length > 0 ? [...newItems, ...existingList] : existingList,
+    merged: newItems.length > 0 ? [...newItems, ...sanitizedExisting] : sanitizedExisting,
     addedCount: newItems.length,
   };
 }
@@ -41,10 +68,8 @@ export function useShoppingList() {
   // Load once on mount (client only)
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setItems(JSON.parse(stored));
-    } catch {
-      // ignore bad/corrupted storage
+      const stored = readVersionedStorage(STORAGE_KEY, isShoppingItemArray, []);
+      setItems(stored.map(sanitizeShoppingItem));
     } finally {
       setHydrated(true);
     }
@@ -53,50 +78,58 @@ export function useShoppingList() {
   // Save whenever items change
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    writeVersionedStorage(STORAGE_KEY, items.map(sanitizeShoppingItem));
   }, [items, hydrated]);
 
-  function addItem(name: string) {
-    setItems((prev) => mergeItems(prev, [name]).merged);
-  }
+  const addItem = useCallback((name: string) => {
+    setItems((prev) => mergeItems(prev, [{ name, source: "manual" }]).merged);
+  }, []);
 
-  function addItems(names: string[]) {
+  const addItems = useCallback((names: string[]) => {
     let addedCount = 0;
     setItems((prev) => {
-      const result = mergeItems(prev, names);
+      const result = mergeItems(
+        prev,
+        names.map((name) => ({ name, source: "recipe" as const }))
+      );
       addedCount = result.addedCount;
       return result.merged;
     });
     return addedCount;
-  }
+  }, []);
 
-  function toggleItem(id: string) {
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === id ? { ...it, checked: !it.checked } : it
-      )
-    );
-  }
+  const addDetailedItems = useCallback((incoming: NewShoppingItem[]) => {
+    let addedCount = 0;
+    setItems((prev) => {
+      const result = mergeItems(prev, incoming);
+      addedCount = result.addedCount;
+      return result.merged;
+    });
+    return addedCount;
+  }, []);
 
-  function removeItem(id: string) {
+  const toggleItem = useCallback((id: string) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, checked: !it.checked } : it)));
+  }, []);
+
+  const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((it) => it.id !== id));
-  }
+  }, []);
 
-  function clearChecked() {
-    setItems((prev) =>
-      prev.map((it) => (it.checked ? { ...it, checked: false } : it))
-    );
-  }
+  const clearChecked = useCallback(() => {
+    setItems((prev) => prev.map((it) => (it.checked ? { ...it, checked: false } : it)));
+  }, []);
 
-  function clearAll() {
+  const clearAll = useCallback(() => {
     setItems([]);
-  }
+  }, []);
 
   return {
     items,
     hydrated,
     addItem,
     addItems,
+    addDetailedItems,
     toggleItem,
     removeItem,
     clearChecked,

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Recipe } from "@/types/recipe";
 import RecipeCard from "./RecipeCard";
 
@@ -5,12 +6,18 @@ type Props = {
   recipes: Recipe[];
   hasAvailableIngredients: boolean;
   onAddMissing: (missing: string[]) => void;
+  favoriteIds: Set<string>;
+  getRecipeId: (recipe: Recipe) => string;
+  onToggleFavorite: (recipe: Recipe) => void;
 };
 
-export default function RecipeList({
+function RecipeList({
   recipes,
   hasAvailableIngredients,
   onAddMissing,
+  favoriteIds,
+  getRecipeId,
+  onToggleFavorite,
 }: Props) {
   if (recipes.length === 0) {
     if (!hasAvailableIngredients) {
@@ -33,7 +40,7 @@ export default function RecipeList({
   );
 
   return (
-    <div className="mt-5 grid gap-4">
+    <div className="mt-5 grid max-h-[70vh] gap-4 overflow-y-auto pr-1">
       {!hasAnyOverlap ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
           No close matches yet. Add more basics like oil, onion, garlic, rice, or pasta.
@@ -42,11 +49,15 @@ export default function RecipeList({
 
       {recipes.map((recipe) => (
         <RecipeCard
-          key={recipe.title}
+          key={getRecipeId(recipe)}
           recipe={recipe}
           onAddMissing={onAddMissing}
+          isFavorite={favoriteIds.has(getRecipeId(recipe))}
+          onToggleFavorite={onToggleFavorite}
         />
       ))}
     </div>
   );
 }
+
+export default memo(RecipeList);

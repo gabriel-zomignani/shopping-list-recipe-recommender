@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { ShoppingItem } from "@/types/shopping";
 
 type Props = {
@@ -8,10 +9,13 @@ type Props = {
   onRemove: (id: string) => void;
 };
 
-export default function ShoppingListItem({ item, onToggle, onRemove }: Props) {
+function ShoppingListItem({ item, onToggle, onRemove }: Props) {
+  const sourceLabel =
+    item.source === "receipt" ? "receipt" : item.source === "recipe" ? "recipe" : null;
+
   return (
     <li
-      className={`flex items-center justify-between rounded-xl border px-3 py-3 shadow-sm transition ${
+      className={`flex items-center justify-between rounded-xl border px-3 py-3 transition ${
         item.checked
           ? "border-slate-200 bg-slate-50"
           : "border-[var(--border-soft)] bg-white"
@@ -30,7 +34,13 @@ export default function ShoppingListItem({ item, onToggle, onRemove }: Props) {
           }`}
         >
           {item.name}
+          {item.quantity !== undefined ? ` (${item.quantity}${item.unit ?? ""})` : ""}
         </span>
+        {sourceLabel ? (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+            {sourceLabel}
+          </span>
+        ) : null}
       </label>
 
       <button
@@ -43,3 +53,5 @@ export default function ShoppingListItem({ item, onToggle, onRemove }: Props) {
     </li>
   );
 }
+
+export default memo(ShoppingListItem);

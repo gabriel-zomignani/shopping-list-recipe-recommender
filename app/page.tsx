@@ -1,16 +1,49 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import AddItemForm from "@/components/shopping/AddItemForm";
-import ShoppingList from "@/components/shopping/ShoppingList";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import RecipeList from "@/components/recipes/RecipeList";
+import AddItemForm from "@/components/shopping/AddItemForm";
+import ReceiptImportReview from "@/components/shopping/ReceiptImportReview";
+import ShoppingList from "@/components/shopping/ShoppingList";
 import { useShoppingList } from "@/hooks/useShoppingList";
+import {
+  getRecipeId,
+  readFavoriteRecipes,
+  toggleFavoriteRecipe,
+} from "@/lib/recipes/favorites";
+import {
+  getHistorySession,
+  saveHistorySession,
+} from "@/lib/recipes/history";
+import { applyRecipeFiltersAndSort, applyStaples } from "@/lib/recipes/session";
 import { getRecipeSuggestions } from "@/lib/recipes/match";
+import { isRecipeArray } from "@/lib/storage/schemas";
+import { readVersionedStorage, writeVersionedStorage } from "@/lib/storage/versioned";
+import type { RecipeHistorySession, RecipeSessionFilters, SortOption } from "@/types/history";
 import type { Recipe } from "@/types/recipe";
+import type { ShoppingItemSource } from "@/types/shopping";
 
-const RECIPE_STORAGE_KEY = "last-generated-recipes";
-const RECIPE_AT_STORAGE_KEY = "last-generated-at";
-const AVAILABLE_STORAGE_KEY = "last-used-available-ingredients";
+const LAST_GENERATED_KEY = "last-generated-state";
+
+type LastGeneratedState = {
+  recipes: Recipe[];
+  generatedAt: string | null;
+};
+
+function isLastGeneratedState(value: unknown): value is LastGeneratedState {
+  if (!value || typeof value !== "object") return false;
+  const parsed = value as LastGeneratedState;
+  return isRecipeArray(parsed.recipes) && (parsed.generatedAt === null || typeof parsed.generatedAt === "string");
+}
+
+function newSessionId() {
+  return `${Date.now()}-${crypto.randomUUID()}`;
+}
+
+function checkedCountFromItems(items: { checked: boolean }[]) {
+  return items.filter((item) => item.checked).length;
+}
 
 export default function Home() {
   const {
@@ -18,81 +51,180 @@ export default function Home() {
     hydrated,
     addItem,
     addItems,
+    addDetailedItems,
     toggleItem,
     removeItem,
     clearChecked,
     clearAll,
   } = useShoppingList();
 
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [generatedRecipes, setGeneratedRecipes] = useState<Recipe[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
   const [recipesHydrated, setRecipesHydrated] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>("best-match");
+  const [maxTime, setMaxTime] = useState<RecipeSessionFilters["maxTime"]>("any");
+  const [maxMissing, setMaxMissing] = useState<RecipeSessionFilters["maxMissing"]>("any");
+  const [assumeStaples, setAssumeStaples] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
 
-  const checkedCount = hydrated ? items.filter((i) => i.checked).length : 0;
+  const filters = useMemo(
+    () => ({ sortBy, maxTime, maxMissing, assumeStaples }),
+    [sortBy, maxTime, maxMissing, assumeStaples]
+  );
+
+  const checkedCount = useMemo(
+    () => (hydrated ? checkedCountFromItems(items) : 0),
+    [items, hydrated]
+  );
+
+  const filteredSortedRecipes = useMemo(
+    () => applyRecipeFiltersAndSort(generatedRecipes, filters),
+    [generatedRecipes, filters]
+  );
 
   useEffect(() => {
     try {
-      const storedRecipes = localStorage.getItem(RECIPE_STORAGE_KEY);
-      const storedGeneratedAt = localStorage.getItem(RECIPE_AT_STORAGE_KEY);
-
-      if (storedRecipes) {
-        setRecipes(JSON.parse(storedRecipes));
-      }
-      if (storedGeneratedAt) {
-        setLastGeneratedAt(storedGeneratedAt);
-      }
-    } catch {
-      // ignore bad/corrupted storage
+      const stored = readVersionedStorage<LastGeneratedState>(
+        LAST_GENERATED_KEY,
+        isLastGeneratedState,
+        { recipes: [], generatedAt: null }
+      );
+      setGeneratedRecipes(stored.recipes);
+      setLastGeneratedAt(stored.generatedAt);
     } finally {
       setRecipesHydrated(true);
     }
   }, []);
 
   useEffect(() => {
+    const favorites = readFavoriteRecipes();
+    setFavoriteIds(new Set(favorites.map(getRecipeId)));
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session");
+    if (!sessionId) return;
+    if (loadedSessionId === sessionId) return;
+
+    const session = getHistorySession(sessionId);
+    if (!session) return;
+
+    setSortBy(session.filters.sortBy);
+    setMaxTime(session.filters.maxTime);
+    setMaxMissing(session.filters.maxMissing);
+    setAssumeStaples(session.filters.assumeStaples);
+    setGeneratedRecipes(session.recipes);
+    setLastGeneratedAt(session.timestamp);
+    setLoadedSessionId(sessionId);
+    setToast("Loaded history session");
+  }, [loadedSessionId]);
+
+  useEffect(() => {
     if (!recipesHydrated) return;
-    localStorage.setItem(RECIPE_STORAGE_KEY, JSON.stringify(recipes));
-    if (lastGeneratedAt) {
-      localStorage.setItem(RECIPE_AT_STORAGE_KEY, lastGeneratedAt);
-    }
-  }, [recipes, lastGeneratedAt, recipesHydrated]);
+    writeVersionedStorage(LAST_GENERATED_KEY, {
+      recipes: generatedRecipes,
+      generatedAt: lastGeneratedAt,
+    });
+  }, [generatedRecipes, lastGeneratedAt, recipesHydrated]);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 2200);
+    const timer = window.setTimeout(() => setToast(null), 2600);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  async function handleGenerate() {
+  const buildAvailableSnapshot = useCallback(() => {
+    const sourceItems = assumeStaples ? applyStaples(items) : items;
+    return sourceItems.filter((item) => item.checked).map((item) => item.name);
+  }, [assumeStaples, items]);
+
+  const handleGenerate = useCallback(async () => {
     setIsGenerating(true);
     await new Promise((r) => setTimeout(r, 500));
 
-    const availableIngredients = items
-      .filter((item) => item.checked)
-      .map((item) => item.name);
-    const generatedRecipes = getRecipeSuggestions(items, 5);
+    const sourceItems = assumeStaples ? applyStaples(items) : items;
+    const nextRecipes = getRecipeSuggestions(sourceItems, 50);
     const generatedAt = new Date().toISOString();
+    const sessionRecipes = applyRecipeFiltersAndSort(nextRecipes, filters);
+    const session: RecipeHistorySession = {
+      id: newSessionId(),
+      timestamp: generatedAt,
+      availableIngredients: sourceItems
+        .filter((item) => item.checked)
+        .map((item) => item.name),
+      filters,
+      recipes: sessionRecipes,
+    };
 
-    setRecipes(generatedRecipes);
+    setGeneratedRecipes(nextRecipes);
     setLastGeneratedAt(generatedAt);
-    localStorage.setItem(
-      AVAILABLE_STORAGE_KEY,
-      JSON.stringify(availableIngredients)
-    );
-
+    saveHistorySession(session);
     setIsGenerating(false);
-  }
+  }, [assumeStaples, filters, items]);
 
-  function handleAddMissing(missing: string[]) {
-    const addedCount = addItems(missing);
-    if (addedCount > 0) {
-      setToast(`Added ${addedCount} item${addedCount > 1 ? "s" : ""} to your list`);
+  const handleSaveSession = useCallback(() => {
+    if (filteredSortedRecipes.length === 0) {
+      setToast("Generate recipes before saving a session");
       return;
     }
 
-    setToast("No new items to add");
-  }
+    const session: RecipeHistorySession = {
+      id: newSessionId(),
+      timestamp: new Date().toISOString(),
+      availableIngredients: buildAvailableSnapshot(),
+      filters,
+      recipes: filteredSortedRecipes,
+    };
+
+    saveHistorySession(session);
+    setToast("Session saved to history");
+  }, [buildAvailableSnapshot, filteredSortedRecipes, filters]);
+
+  const handleAddMissing = useCallback(
+    (missing: string[]) => {
+      const addedCount = addItems(missing);
+      if (addedCount > 0) {
+        setToast(`Added ${addedCount} item${addedCount > 1 ? "s" : ""} to your list`);
+        return;
+      }
+
+      setToast("No new items to add");
+    },
+    [addItems]
+  );
+
+  const handleToggleFavorite = useCallback((recipe: Recipe) => {
+    const nextFavorites = toggleFavoriteRecipe(recipe);
+    const nextIds = new Set(nextFavorites.map(getRecipeId));
+    const isNowFavorite = nextIds.has(getRecipeId(recipe));
+
+    setFavoriteIds(nextIds);
+    setToast(isNowFavorite ? "Saved to favorites" : "Removed from favorites");
+  }, []);
+
+  const handleAddReceiptItems = useCallback(
+    (
+      extractedItems: Array<{
+        name: string;
+        quantity?: number;
+        unit?: string;
+        source: ShoppingItemSource;
+      }>
+    ) => {
+      const addedCount = addDetailedItems(extractedItems);
+      if (addedCount > 0) {
+        setToast(`Imported ${addedCount} receipt item${addedCount > 1 ? "s" : ""}`);
+        return;
+      }
+      setToast("No new receipt items to import");
+    },
+    [addDetailedItems]
+  );
 
   return (
     <main className="min-h-screen pb-12">
@@ -110,6 +242,12 @@ export default function Home() {
           <span>Shopping List</span>
           <span>Available Items</span>
           <span>Recipe Suggestions</span>
+          <Link href="/favorites" className="underline-offset-2 hover:underline">
+            Favorites
+          </Link>
+          <Link href="/history" className="underline-offset-2 hover:underline">
+            History
+          </Link>
         </div>
       </div>
 
@@ -120,7 +258,7 @@ export default function Home() {
       </div>
 
       <div className="mx-auto mt-6 flex w-full max-w-5xl flex-col gap-8 px-4 sm:px-6 lg:px-8">
-        <header className="rounded-2xl bg-[var(--brand-red)] px-6 py-8 text-white shadow-[0_14px_34px_rgba(141,12,37,0.3)] sm:px-10 sm:py-11">
+        <header className="rounded-2xl bg-[var(--brand-red)] px-6 py-8 text-white shadow-md sm:px-10 sm:py-11">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/85">
             ZomigValu Kitchen
           </p>
@@ -135,8 +273,17 @@ export default function Home() {
           </p>
         </header>
 
-        <section className="rounded-2xl border border-[#d4d9df] bg-white p-5 shadow-[0_8px_22px_rgba(16,24,40,0.08)] sm:p-7">
-          <h2 className="text-2xl font-extrabold text-[var(--brand-red-strong)]">My Shopping List</h2>
+        <section className="rounded-2xl border border-[#d4d9df] bg-white p-5 shadow-sm sm:p-7">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-2xl font-extrabold text-[var(--brand-red-strong)]">My Shopping List</h2>
+            <button
+              type="button"
+              onClick={() => setIsReceiptOpen(true)}
+              className="rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm font-semibold text-[var(--ink-soft)] transition hover:bg-slate-50"
+            >
+              Import receipt
+            </button>
+          </div>
 
           <AddItemForm onAdd={addItem} />
           {!hydrated ? (
@@ -153,10 +300,18 @@ export default function Home() {
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               onClick={handleGenerate}
-              disabled={!hydrated || checkedCount === 0 || isGenerating}
-              className="rounded-lg bg-[var(--brand-green)] px-5 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(23,128,58,0.35)] transition hover:bg-[var(--brand-green-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!hydrated || (!assumeStaples && checkedCount === 0) || isGenerating}
+              className="rounded-lg bg-[var(--brand-green)] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--brand-green-strong)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isGenerating ? "Generating..." : "Generate Recipes"}
+            </button>
+
+            <button
+              onClick={handleSaveSession}
+              disabled={filteredSortedRecipes.length === 0}
+              className="rounded-lg border border-[var(--border-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--ink-soft)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Save session
             </button>
 
             <button
@@ -175,19 +330,9 @@ export default function Home() {
               Clear all
             </button>
           </div>
-
-          {toast ? (
-            <p
-              className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700"
-              role="status"
-              aria-live="polite"
-            >
-              {toast}
-            </p>
-          ) : null}
         </section>
 
-        <section className="rounded-2xl border border-[#d4d9df] bg-white p-5 shadow-[0_8px_22px_rgba(16,24,40,0.08)] sm:p-7">
+        <section className="rounded-2xl border border-[#d4d9df] bg-white p-5 shadow-sm sm:p-7">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h2 className="text-2xl font-extrabold text-[var(--brand-red-strong)]">Suggested Recipes</h2>
             {lastGeneratedAt ? (
@@ -197,13 +342,90 @@ export default function Home() {
             ) : null}
           </div>
 
+          <div className="mt-4 grid gap-3 rounded-xl border border-[var(--border-soft)] bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-5">
+            <label className="text-xs font-semibold text-[var(--ink-soft)]">
+              Sort
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as SortOption)}
+                className="mt-1 w-full rounded-md border border-[var(--border-soft)] bg-white px-2 py-1.5 text-sm text-[var(--ink)]"
+              >
+                <option value="best-match">Best match</option>
+                <option value="least-missing">Least missing</option>
+                <option value="fastest">Fastest</option>
+              </select>
+            </label>
+
+            <label className="text-xs font-semibold text-[var(--ink-soft)]">
+              Max time
+              <select
+                value={maxTime}
+                onChange={(event) => setMaxTime(event.target.value as RecipeSessionFilters["maxTime"])}
+                className="mt-1 w-full rounded-md border border-[var(--border-soft)] bg-white px-2 py-1.5 text-sm text-[var(--ink)]"
+              >
+                <option value="any">Any</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
+              </select>
+            </label>
+
+            <label className="text-xs font-semibold text-[var(--ink-soft)]">
+              Max missing
+              <select
+                value={maxMissing}
+                onChange={(event) =>
+                  setMaxMissing(event.target.value as RecipeSessionFilters["maxMissing"])
+                }
+                className="mt-1 w-full rounded-md border border-[var(--border-soft)] bg-white px-2 py-1.5 text-sm text-[var(--ink)]"
+              >
+                <option value="any">Any</option>
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </label>
+
+            <label className="flex items-center gap-2 pt-5 text-sm font-semibold text-[var(--ink-soft)] lg:col-span-2">
+              <input
+                type="checkbox"
+                checked={assumeStaples}
+                onChange={(event) => setAssumeStaples(event.target.checked)}
+                className="h-4 w-4 accent-[var(--brand-green)]"
+              />
+              Assume pantry staples are available
+            </label>
+          </div>
+
           <RecipeList
-            recipes={recipes}
-            hasAvailableIngredients={checkedCount > 0}
+            recipes={filteredSortedRecipes}
+            hasAvailableIngredients={checkedCount > 0 || assumeStaples}
             onAddMissing={handleAddMissing}
+            favoriteIds={favoriteIds}
+            getRecipeId={getRecipeId}
+            onToggleFavorite={handleToggleFavorite}
           />
         </section>
       </div>
+
+      <ReceiptImportReview
+        isOpen={isReceiptOpen}
+        onClose={() => setIsReceiptOpen(false)}
+        onAdd={handleAddReceiptItems}
+      />
+
+      {toast ? (
+        <p
+          className="fixed right-4 top-4 z-40 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm"
+          role="status"
+          aria-live="polite"
+        >
+          {toast}
+        </p>
+      ) : null}
     </main>
   );
 }
