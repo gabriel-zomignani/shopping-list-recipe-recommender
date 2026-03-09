@@ -248,6 +248,15 @@ export default function Home() {
           <Link href="/history" className="underline-offset-2 hover:underline">
             History
           </Link>
+          <Link href="/login" className="underline-offset-2 hover:underline">
+            Log in
+          </Link>
+          <Link href="/signup" className="underline-offset-2 hover:underline">
+            Sign up
+          </Link>
+          <Link href="/logout" className="underline-offset-2 hover:underline">
+            Log out
+          </Link>
         </div>
       </div>
 
