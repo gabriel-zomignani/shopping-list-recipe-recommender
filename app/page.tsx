@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ReceiptReviewModal from "@/components/receipt/ReceiptReviewModal";
 import RecipeList from "@/components/recipes/RecipeList";
 import AddItemForm from "@/components/shopping/AddItemForm";
-import ReceiptImportReview from "@/components/shopping/ReceiptImportReview";
 import ShoppingList from "@/components/shopping/ShoppingList";
 import { useShoppingList } from "@/hooks/useShoppingList";
 import {
@@ -20,9 +20,9 @@ import { applyRecipeFiltersAndSort, applyStaples } from "@/lib/recipes/session";
 import { getRecipeSuggestions } from "@/lib/recipes/match";
 import { isRecipeArray } from "@/lib/storage/schemas";
 import { readVersionedStorage, writeVersionedStorage } from "@/lib/storage/versioned";
+import type { ReceiptImportItem } from "@/types/receipt";
 import type { RecipeHistorySession, RecipeSessionFilters, SortOption } from "@/types/history";
 import type { Recipe } from "@/types/recipe";
-import type { ShoppingItemSource } from "@/types/shopping";
 
 const LAST_GENERATED_KEY = "last-generated-state";
 
@@ -208,14 +208,7 @@ export default function Home() {
   }, []);
 
   const handleAddReceiptItems = useCallback(
-    (
-      extractedItems: Array<{
-        name: string;
-        quantity?: number;
-        unit?: string;
-        source: ShoppingItemSource;
-      }>
-    ) => {
+    (extractedItems: ReceiptImportItem[]) => {
       const addedCount = addDetailedItems(extractedItems);
       if (addedCount > 0) {
         setToast(`Imported ${addedCount} receipt item${addedCount > 1 ? "s" : ""}`);
@@ -411,7 +404,7 @@ export default function Home() {
         </section>
       </div>
 
-      <ReceiptImportReview
+      <ReceiptReviewModal
         isOpen={isReceiptOpen}
         onClose={() => setIsReceiptOpen(false)}
         onAdd={handleAddReceiptItems}
