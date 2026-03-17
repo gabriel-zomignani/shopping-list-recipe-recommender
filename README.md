@@ -148,8 +148,10 @@ Open `http://localhost:3000`.
 - Add import/export for local history and favorites
 
 ## TODO
+<img width="1831" height="1290" alt="image" src="https://github.com/user-attachments/assets/452fa248-dadb-4062-b9a0-7a40350bcfc6" />
+<img width="1794" height="1204" alt="image" src="https://github.com/user-attachments/assets/257fda86-fd12-4981-8764-5b7a1fd2b8f1" />
+<img width="1052" height="1328" alt="image" src="https://github.com/user-attachments/assets/c2ad4668-3553-44ac-b389-c65527eb20bd" />
 
-- Add screenshots
 - Add demo GIF
 
 ## Branch Notes
