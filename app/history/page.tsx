@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { requestRecipeSuggestions } from "@/lib/recipes/api";
 import {
   deleteHistorySession,
   readHistorySessions,
   saveHistorySession,
 } from "@/lib/recipes/history";
-import { generateRecipesForSession } from "@/lib/recipes/session";
+import { applyRecipeFiltersAndSort } from "@/lib/recipes/session";
 import type { RecipeHistorySession } from "@/types/history";
-import type { ShoppingItem } from "@/types/shopping";
 
 function formatSessionSummary(session: RecipeHistorySession) {
   const maxTimeLabel =
@@ -25,6 +25,8 @@ function formatSessionSummary(session: RecipeHistorySession) {
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<RecipeHistorySession[]>(() => readHistorySessions());
   const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [rerunningId, setRerunningId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -34,28 +36,38 @@ export default function HistoryPage() {
 
   const handleDelete = useCallback((id: string) => {
     setSessions(deleteHistorySession(id));
+    setError(null);
     setToast("Session deleted");
   }, []);
 
-  const handleRerun = useCallback((session: RecipeHistorySession) => {
-    const syntheticItems: ShoppingItem[] = session.availableIngredients.map((name, index) => ({
-      id: `session-item-${index + 1}`,
-      name,
-      checked: true,
-      source: "manual",
-      normalizedName: name.trim().toLowerCase(),
-    }));
+  const handleRerun = useCallback(async (session: RecipeHistorySession) => {
+    setRerunningId(session.id);
+    setError(null);
 
-    const rerun = generateRecipesForSession(syntheticItems, session.filters);
-    const updatedSession: RecipeHistorySession = {
-      ...session,
-      timestamp: new Date().toISOString(),
-      recipes: rerun.recipes,
-      availableIngredients: rerun.availableIngredients,
-    };
+    try {
+      const recipes = await requestRecipeSuggestions({
+        availableIngredients: session.availableIngredients,
+        maxCookingTime:
+          session.filters.maxTime === "any" ? null : Number(session.filters.maxTime),
+        maxMissingIngredients:
+          session.filters.maxMissing === "any" ? null : Number(session.filters.maxMissing),
+        desiredCount: 5,
+      });
+      const updatedSession: RecipeHistorySession = {
+        ...session,
+        timestamp: new Date().toISOString(),
+        recipes: applyRecipeFiltersAndSort(recipes, session.filters),
+      };
 
-    setSessions(saveHistorySession(updatedSession));
-    setToast("Session re-run and updated");
+      setSessions(saveHistorySession(updatedSession));
+      setToast("Session re-run and updated");
+    } catch (rerunError) {
+      setError(
+        rerunError instanceof Error ? rerunError.message : "Session re-run failed."
+      );
+    } finally {
+      setRerunningId(null);
+    }
   }, []);
 
   return (
@@ -77,6 +89,11 @@ export default function HistoryPage() {
           <p className="mt-2 text-sm text-[var(--ink-soft)]">
             Saved sessions: {sessions.length}
           </p>
+          {error ? (
+            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {error}
+            </p>
+          ) : null}
 
           {sessions.length === 0 ? (
             <p className="mt-4 rounded-xl border border-[var(--border-soft)] bg-slate-50 px-4 py-3 text-sm text-[var(--ink-soft)]">
@@ -105,9 +122,10 @@ export default function HistoryPage() {
                     <button
                       type="button"
                       onClick={() => handleRerun(session)}
+                      disabled={rerunningId === session.id}
                       className="rounded-lg bg-[var(--brand-green)] px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-[var(--brand-green-strong)]"
                     >
-                      Re-run
+                      {rerunningId === session.id ? "Re-running..." : "Re-run"}
                     </button>
                     <button
                       type="button"

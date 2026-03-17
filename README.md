@@ -1,42 +1,159 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ZomigValu
 
-## Getting Started
+ZomigValu is a local-first shopping planner built with Next.js. It helps turn a grocery receipt into a practical shopping list, then uses local Ollama models to generate structured recipe suggestions from the ingredients you already have.
 
-First, run the development server:
+The app runs entirely on the user’s machine except for the local Ollama runtime. There is no active cloud database, no auth dependency, and no external AI API requirement in the current branch.
+
+## Current Feature Set
+
+- Local shopping list with case-insensitive dedupe and local persistence
+- Receipt image import with local Ollama vision extraction
+- Review and edit step before importing receipt items
+- Local recipe generation with Ollama from checked available ingredients
+- Favorites saved locally
+- Recipe history saved locally
+- Existing recipe filters and sort controls preserved in the UI
+
+## Architecture
+
+The project is intentionally local-first:
+
+- UI: Next.js App Router frontend with local storage for shopping list, favorites, and history
+- Receipt extraction: `POST /api/receipt` -> local Ollama vision model -> validated JSON -> review modal -> local shopping list
+- Recipe generation: `POST /api/recipes` -> local Ollama text generation -> validated JSON -> existing recipe cards, favorites, and history flows
+- Persistence: browser local storage only for active product behavior
+
+There is no active Supabase/auth runtime on this branch.
+
+## Receipt Extraction Flow
+
+1. Upload a receipt image from the home page
+2. The app sends the image to the local Ollama vision model
+3. The server validates the returned JSON shape
+4. The review modal lets you edit names, quantities, units, and deselect items
+5. Selected items are added to the local shopping list with `source: "receipt"`
+
+Expected receipt result shape:
+
+```json
+{
+  "store": "string | null",
+  "date": "string | null",
+  "items": [
+    {
+      "name": "string",
+      "quantity": "number | null",
+      "unit": "string | null"
+    }
+  ]
+}
+```
+
+## Recipe Generation Flow
+
+1. Check the shopping-list items you already have available
+2. Optionally enable pantry staples in the existing toggle
+3. Click `Generate Recipes`
+4. The app sends the available ingredient list to the local Ollama recipe route
+5. The server validates the returned JSON and normalizes the recipes
+6. Recipes render through the existing recipe UI, with missing ingredients, favorites, and history support intact
+
+Expected recipe result shape:
+
+```json
+{
+  "recipes": [
+    {
+      "title": "string",
+      "cookingTime": "number",
+      "ingredients": ["string"],
+      "steps": ["string"],
+      "missingIngredients": ["string"]
+    }
+  ]
+}
+```
+
+## Setup
+
+### 1. Install Ollama
+
+Install Ollama from the official site for your OS, then start the local runtime:
+
+```bash
+ollama serve
+```
+
+### 2. Pull the local models
+
+This branch defaults both receipt extraction and recipe generation to the same local model to keep setup simple:
+
+```bash
+ollama pull qwen2.5vl:7b
+```
+
+If you want a different local text model later, set `OLLAMA_RECIPE_MODEL` explicitly in `.env.local`.
+
+### 3. Environment Variables
+
+Create `.env.local` from `.env.example` if needed:
+
+```bash
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_VISION_MODEL=qwen2.5vl:7b
+OLLAMA_RECIPE_MODEL=qwen2.5vl:7b
+```
+
+## Run The App
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create a clean production build:
 
-## Current Project State
+```bash
+npm run build
+```
 
-`master` is the stable local-first V1 branch. Favorites, history, and shopping-list flows run from local storage with no auth or cloud dependency.
+Run the production server locally:
 
-The unfinished Supabase/auth Phase 2 work is preserved on the `phase-2-supabase-wip` branch for later continuation.
+```bash
+npm start
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open `http://localhost:3000`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Local-First Notes
 
-## Learn More
+- The app works offline/local apart from the local Ollama runtime
+- Favorites and history are stored in browser local storage
+- Shopping list state is stored in browser local storage
+- There is no active auth, Supabase session, or cloud sync dependency in this branch
 
-To learn more about Next.js, take a look at the following resources:
+## Roadmap
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Phase 2 Supabase/auth work is intentionally parked on `phase-2-supabase-wip`
+- Improve receipt extraction robustness for noisier store layouts
+- Add richer recipe preferences such as cuisine, servings, and dietary filters
+- Improve recipe card presentation with optional quantities or serving estimates
+- Add import/export for local history and favorites
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## TODO
 
-## Deploy on Vercel
+- Add screenshots
+- Add demo GIF
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Branch Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Stable local-first baseline: `master`
+- Current Ollama AI feature branch: `phase-3-receipt-ai-mvp`
+- Parked Supabase/auth exploration: `phase-2-supabase-wip`
