@@ -24,6 +24,8 @@ export default function ShoppingList({
   onRemove,
   onQuickAdd,
 }: Props) {
+  const sortedItems = useMemo(() => [...items].sort(compareByStatusThenName), [items]);
+
   if (items.length === 0) {
     return (
       <div className="mt-5 rounded-2xl border border-dashed border-[var(--brand-red)]/35 bg-red-50/35 p-5">
@@ -43,8 +45,6 @@ export default function ShoppingList({
       </div>
     );
   }
-
-  const sortedItems = useMemo(() => [...items].sort(compareByStatusThenName), [items]);
 
   return (
     <ul className="mt-5 max-h-[40vh] space-y-2.5 overflow-y-auto pr-1">

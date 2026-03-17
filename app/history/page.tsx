@@ -23,12 +23,8 @@ function formatSessionSummary(session: RecipeHistorySession) {
 }
 
 export default function HistoryPage() {
-  const [sessions, setSessions] = useState<RecipeHistorySession[]>([]);
+  const [sessions, setSessions] = useState<RecipeHistorySession[]>(() => readHistorySessions());
   const [toast, setToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSessions(readHistorySessions());
-  }, []);
 
   useEffect(() => {
     if (!toast) return;

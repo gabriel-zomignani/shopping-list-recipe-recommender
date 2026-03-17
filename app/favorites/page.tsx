@@ -13,17 +13,13 @@ import type { Recipe } from "@/types/recipe";
 
 export default function FavoritesPage() {
   const { addItems } = useShoppingList();
-  const [favorites, setFavorites] = useState<Recipe[]>([]);
+  const [favorites, setFavorites] = useState<Recipe[]>(() => readFavoriteRecipes());
   const [toast, setToast] = useState<string | null>(null);
 
   const favoriteIds = useMemo(
     () => new Set(favorites.map(getRecipeId)),
     [favorites]
   );
-
-  useEffect(() => {
-    setFavorites(readFavoriteRecipes());
-  }, []);
 
   useEffect(() => {
     if (!toast) return;
