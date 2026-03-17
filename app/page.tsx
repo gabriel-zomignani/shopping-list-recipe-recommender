@@ -7,6 +7,7 @@ import RecipeList from "@/components/recipes/RecipeList";
 import AddItemForm from "@/components/shopping/AddItemForm";
 import ShoppingList from "@/components/shopping/ShoppingList";
 import { useShoppingList } from "@/hooks/useShoppingList";
+import { requestRecipeSuggestions } from "@/lib/recipes/api";
 import {
   getRecipeId,
   readFavoriteRecipes,
@@ -17,7 +18,6 @@ import {
   saveHistorySession,
 } from "@/lib/recipes/history";
 import { applyRecipeFiltersAndSort, applyStaples } from "@/lib/recipes/session";
-import { getRecipeSuggestions } from "@/lib/recipes/match";
 import { isRecipeArray } from "@/lib/storage/schemas";
 import { readVersionedStorage, writeVersionedStorage } from "@/lib/storage/versioned";
 import type { ReceiptImportItem } from "@/types/receipt";
@@ -63,6 +63,7 @@ export default function Home() {
   const [toast, setToast] = useState<string | null>(null);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
   const [recipesHydrated, setRecipesHydrated] = useState(false);
+  const [recipeError, setRecipeError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("best-match");
   const [maxTime, setMaxTime] = useState<RecipeSessionFilters["maxTime"]>("any");
   const [maxMissing, setMaxMissing] = useState<RecipeSessionFilters["maxMissing"]>("any");
@@ -121,6 +122,7 @@ export default function Home() {
     setGeneratedRecipes(session.recipes);
     setLastGeneratedAt(session.timestamp);
     setLoadedSessionId(sessionId);
+    setRecipeError(null);
     setToast("Loaded history session");
   }, [loadedSessionId]);
 
@@ -144,28 +146,40 @@ export default function Home() {
   }, [assumeStaples, items]);
 
   const handleGenerate = useCallback(async () => {
+    const availableIngredients = buildAvailableSnapshot();
+    if (availableIngredients.length === 0) return;
+
     setIsGenerating(true);
-    await new Promise((r) => setTimeout(r, 500));
+    setRecipeError(null);
 
-    const sourceItems = assumeStaples ? applyStaples(items) : items;
-    const nextRecipes = getRecipeSuggestions(sourceItems, 50);
-    const generatedAt = new Date().toISOString();
-    const sessionRecipes = applyRecipeFiltersAndSort(nextRecipes, filters);
-    const session: RecipeHistorySession = {
-      id: newSessionId(),
-      timestamp: generatedAt,
-      availableIngredients: sourceItems
-        .filter((item) => item.checked)
-        .map((item) => item.name),
-      filters,
-      recipes: sessionRecipes,
-    };
+    try {
+      const nextRecipes = await requestRecipeSuggestions({
+        availableIngredients,
+        maxCookingTime: maxTime === "any" ? null : Number(maxTime),
+        maxMissingIngredients: maxMissing === "any" ? null : Number(maxMissing),
+        desiredCount: 5,
+      });
+      const generatedAt = new Date().toISOString();
+      const sessionRecipes = applyRecipeFiltersAndSort(nextRecipes, filters);
+      const session: RecipeHistorySession = {
+        id: newSessionId(),
+        timestamp: generatedAt,
+        availableIngredients,
+        filters,
+        recipes: sessionRecipes,
+      };
 
-    setGeneratedRecipes(nextRecipes);
-    setLastGeneratedAt(generatedAt);
-    saveHistorySession(session);
-    setIsGenerating(false);
-  }, [assumeStaples, filters, items]);
+      setGeneratedRecipes(nextRecipes);
+      setLastGeneratedAt(generatedAt);
+      saveHistorySession(session);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Recipe generation failed.";
+      setRecipeError(message);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [buildAvailableSnapshot, filters, maxMissing, maxTime]);
 
   const handleSaveSession = useCallback(() => {
     if (filteredSortedRecipes.length === 0) {
@@ -396,6 +410,7 @@ export default function Home() {
           <RecipeList
             recipes={filteredSortedRecipes}
             hasAvailableIngredients={checkedCount > 0 || assumeStaples}
+            error={recipeError}
             onAddMissing={handleAddMissing}
             favoriteIds={favoriteIds}
             getRecipeId={getRecipeId}

@@ -5,6 +5,7 @@ import RecipeCard from "./RecipeCard";
 type Props = {
   recipes: Recipe[];
   hasAvailableIngredients: boolean;
+  error?: string | null;
   onAddMissing: (missing: string[]) => void;
   favoriteIds: Set<string>;
   getRecipeId: (recipe: Recipe) => string;
@@ -14,6 +15,7 @@ type Props = {
 function RecipeList({
   recipes,
   hasAvailableIngredients,
+  error,
   onAddMissing,
   favoriteIds,
   getRecipeId,
@@ -41,6 +43,11 @@ function RecipeList({
 
   return (
     <div className="mt-5 grid max-h-[70vh] gap-4 overflow-y-auto pr-1">
+      {error ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
+          {error}
+        </p>
+      ) : null}
       {!hasAnyOverlap ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
           No close matches yet. Add more basics like oil, onion, garlic, rice, or pasta.

@@ -1,4 +1,3 @@
-import { getRecipeSuggestions } from "@/lib/recipes/match";
 import type { RecipeSessionFilters } from "@/types/history";
 import type { Recipe } from "@/types/recipe";
 import type { ShoppingItem } from "@/types/shopping";
@@ -64,15 +63,4 @@ export function applyRecipeFiltersAndSort(recipes: Recipe[], filters: RecipeSess
   });
 
   return filtered;
-}
-
-export function generateRecipesForSession(items: ShoppingItem[], filters: RecipeSessionFilters) {
-  const sourceItems = filters.assumeStaples ? applyStaples(items) : items;
-  const baseRecipes = getRecipeSuggestions(sourceItems, 50);
-  const recipes = applyRecipeFiltersAndSort(baseRecipes, filters);
-  const availableIngredients = sourceItems
-    .filter((item) => item.checked)
-    .map((item) => item.name);
-
-  return { recipes, availableIngredients };
 }
