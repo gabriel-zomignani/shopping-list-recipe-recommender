@@ -124,7 +124,31 @@ npm run build
 npm start
 ```
 
-## Notes
+Open `http://localhost:3000`.
+
+## Local-First Notes
+
+- The app works offline/local apart from the local Ollama runtime
+- Favorites and history are stored in browser local storage
+- Shopping list state is stored in browser local storage
+- There is no active auth, Supabase session, or cloud sync dependency in this branch
+
+## Roadmap
+
+- Phase 2 Supabase/auth work is intentionally parked on `phase-2-supabase-wip`
+- Improve receipt extraction robustness for noisier store layouts
+- Add richer recipe preferences such as cuisine, servings, and dietary filters
+- Improve recipe card presentation with optional quantities or serving estimates
+- Add import/export for local history and favorites
+
+## TODO
+<img width="1831" height="1290" alt="image" src="https://github.com/user-attachments/assets/452fa248-dadb-4062-b9a0-7a40350bcfc6" />
+<img width="1794" height="1204" alt="image" src="https://github.com/user-attachments/assets/257fda86-fd12-4981-8764-5b7a1fd2b8f1" />
+<img width="1052" height="1328" alt="image" src="https://github.com/user-attachments/assets/c2ad4668-3553-44ac-b389-c65527eb20bd" />
+
+- Add demo GIF
+
+## Branch Notes
 
 - Frontend no longer uses local Next.js API routes for OCR/AI runtime.
 - Backend owns OCR + AI provider integration and output normalization.
