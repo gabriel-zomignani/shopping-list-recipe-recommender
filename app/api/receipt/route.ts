@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
-import { extractReceiptFromImage } from "@/lib/receipt/ollama";
+import { extractReceiptFromImage } from "@/lib/receipt/extraction";
 import {
   isAllowedReceiptImageType,
   MAX_RECEIPT_UPLOAD_BYTES,
 } from "@/lib/receipt/schema";
 
 export const runtime = "nodejs";
+
+function toPublicReceiptError(message: string) {
+  if (message.includes("OCR_SPACE_API_KEY")) {
+    return "Receipt OCR service is not configured on this server.";
+  }
+
+  if (message.includes("OPENROUTER_API_KEY")) {
+    return "Receipt AI extraction service is not configured on this server.";
+  }
+
+  return message;
+}
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -43,12 +55,14 @@ export async function POST(request: Request) {
     const extracted = await extractReceiptFromImage({
       fileBytes: await uploaded.arrayBuffer(),
       fileName: uploaded.name,
+      mimeType: uploaded.type,
     });
 
     return NextResponse.json(extracted);
   } catch (error) {
-    const message =
+    const rawMessage =
       error instanceof Error ? error.message : "Receipt extraction failed unexpectedly.";
+    const message = toPublicReceiptError(rawMessage);
 
     return NextResponse.json({ error: message }, { status: 502 });
   }

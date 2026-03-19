@@ -1,39 +1,42 @@
 # ZomigValu
 
-ZomigValu is a local-first shopping planner built with Next.js. It helps turn a grocery receipt into a practical shopping list, then uses local Ollama models to generate structured recipe suggestions from the ingredients you already have.
+ZomigValu is a local-first shopping planner built with Next.js. You can import a grocery receipt image, review extracted ingredients, add selected items to your list, and generate practical recipes from what is currently available in your shopping list.
 
-The app runs entirely on the user’s machine except for the local Ollama runtime. There is no active cloud database, no auth dependency, and no external AI API requirement in the current branch.
-
-## Current Feature Set
-
-- Local shopping list with case-insensitive dedupe and local persistence
-- Receipt image import with local Ollama vision extraction
-- Review and edit step before importing receipt items
-- Local recipe generation with Ollama from checked available ingredients
-- Favorites saved locally
-- Recipe history saved locally
-- Existing recipe filters and sort controls preserved in the UI
-
-## Architecture
-
-The project is intentionally local-first:
-
-- UI: Next.js App Router frontend with local storage for shopping list, favorites, and history
-- Receipt extraction: `POST /api/receipt` -> local Ollama vision model -> validated JSON -> review modal -> local shopping list
-- Recipe generation: `POST /api/recipes` -> local Ollama text generation -> validated JSON -> existing recipe cards, favorites, and history flows
-- Persistence: browser local storage only for active product behavior
+The active runtime is deployment-friendly for Vercel Hobby:
+- Frontend and API routes run in Next.js App Router.
+- Receipt OCR runs through OCR.space.
+- Ingredient extraction and recipe generation run through OpenRouter.
+- Shopping list, favorites, and history remain browser-local.
 
 There is no active Supabase/auth runtime on this branch.
 
-## Receipt Extraction Flow
+## Current Features
 
-1. Upload a receipt image from the home page
-2. The app sends the image to the local Ollama vision model
-3. The server validates the returned JSON shape
-4. The review modal lets you edit names, quantities, units, and deselect items
-5. Selected items are added to the local shopping list with `source: "receipt"`
+- Local shopping list with case-insensitive dedupe
+- Receipt upload (`jpg`, `png`, `webp`) with OCR + AI extraction
+- Review/edit/deselect receipt items before import
+- Recipe generation from checked available ingredients
+- Pantry staples toggle for recipe generation
+- Favorites stored locally
+- Recipe history sessions stored locally
 
-Expected receipt result shape:
+## Active Architecture
+
+- `app/api/receipt/route.ts`
+  - Validates image upload
+  - Calls `lib/ocr/ocrSpace.ts` for receipt text
+  - Calls `lib/ai/openrouter.ts` + `lib/receipt/extraction.ts` for structured grocery items
+  - Validates and normalizes output with `lib/receipt/schema.ts`
+- `app/api/recipes/route.ts`
+  - Validates generation request
+  - Calls `lib/ai/openrouter.ts` + `lib/recipes/openrouter.ts`
+  - Validates and normalizes output with `lib/recipes/schema.ts`
+- Local persistence only
+  - Shopping list, favorites, history: browser local storage
+
+## Data Shapes
+
+Receipt extraction response:
 
 ```json
 {
@@ -49,16 +52,7 @@ Expected receipt result shape:
 }
 ```
 
-## Recipe Generation Flow
-
-1. Check the shopping-list items you already have available
-2. Optionally enable pantry staples in the existing toggle
-3. Click `Generate Recipes`
-4. The app sends the available ingredient list to the local Ollama recipe route
-5. The server validates the returned JSON and normalizes the recipes
-6. Recipes render through the existing recipe UI, with missing ingredients, favorites, and history support intact
-
-Expected recipe result shape:
+Recipe generation response:
 
 ```json
 {
@@ -76,55 +70,36 @@ Expected recipe result shape:
 
 ## Setup
 
-### 1. Install Ollama
-
-Install Ollama from the official site for your OS, then start the local runtime:
-
-```bash
-ollama serve
-```
-
-### 2. Pull the local models
-
-This branch defaults both receipt extraction and recipe generation to the same local model to keep setup simple:
-
-```bash
-ollama pull qwen2.5vl:7b
-```
-
-If you want a different local text model later, set `OLLAMA_RECIPE_MODEL` explicitly in `.env.local`.
-
-### 3. Environment Variables
-
-Create `.env.local` from `.env.example` if needed:
-
-```bash
-OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_VISION_MODEL=qwen2.5vl:7b
-OLLAMA_RECIPE_MODEL=qwen2.5vl:7b
-```
-
-## Run The App
-
-Install dependencies:
+1. Install dependencies:
 
 ```bash
 npm install
 ```
 
-Run the development server:
+2. Copy `.env.example` to `.env.local` and fill keys:
+
+```bash
+OCR_SPACE_API_KEY=
+OPENROUTER_API_KEY=
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL_EXTRACTION=openrouter/free
+OPENROUTER_MODEL_RECIPES=openrouter/free
+```
+
+Notes:
+- `OPENROUTER_BASE_URL` defaults to `https://openrouter.ai/api/v1` if omitted.
+- Model defaults are configurable through env vars.
+- API keys are server-only and never sent to the browser.
+
+## Run
 
 ```bash
 npm run dev
 ```
 
-Create a clean production build:
-
 ```bash
 npm run build
 ```
-
-Run the production server locally:
 
 ```bash
 npm start
@@ -132,28 +107,15 @@ npm start
 
 Open `http://localhost:3000`.
 
-## Local-First Notes
+## Deployment Notes
 
-- The app works offline/local apart from the local Ollama runtime
-- Favorites and history are stored in browser local storage
-- Shopping list state is stored in browser local storage
-- There is no active auth, Supabase session, or cloud sync dependency in this branch
+- Designed for Vercel Hobby deployment.
+- No dependency on local Ollama runtime.
+- No cloud database requirement in current phase.
+- No auth/session requirement in active runtime.
 
-## Roadmap
+## Branch and Roadmap Notes
 
-- Phase 2 Supabase/auth work is intentionally parked on `phase-2-supabase-wip`
-- Improve receipt extraction robustness for noisier store layouts
-- Add richer recipe preferences such as cuisine, servings, and dietary filters
-- Improve recipe card presentation with optional quantities or serving estimates
-- Add import/export for local history and favorites
-
-## TODO
-
-- Add screenshots
-- Add demo GIF
-
-## Branch Notes
-
-- Stable local-first baseline: `master`
-- Current Ollama AI feature branch: `phase-3-receipt-ai-mvp`
-- Parked Supabase/auth exploration: `phase-2-supabase-wip`
+- Previous Supabase/auth exploration is intentionally parked on `phase-2-supabase-wip` and is not part of active runtime.
+- Neon is intentionally deferred and optional for a future persistence phase.
+- Future work can add optional cloud sync without changing the local-first default behavior.

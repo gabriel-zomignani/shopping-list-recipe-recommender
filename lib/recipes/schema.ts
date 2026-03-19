@@ -166,15 +166,16 @@ export function parseRecipeGenerationResponse(
   availableIngredients: string[]
 ): RecipeGenerationResponse {
   if (!isRawRecipeResponse(value)) {
-    throw new Error("Ollama returned JSON in an unexpected recipe shape.");
+    throw new Error("Recipe generation returned JSON in an unexpected format.");
   }
 
   const recipes = value.recipes
     .map((recipe) => normalizeRecipe(recipe, availableIngredients))
-    .filter((recipe): recipe is Recipe => recipe !== null);
+    .filter((recipe): recipe is Recipe => recipe !== null)
+    .slice(0, 5);
 
-  if (recipes.length === 0) {
-    throw new Error("Ollama did not return any usable recipes.");
+  if (recipes.length < 3) {
+    throw new Error("Recipe generation did not return enough usable recipes. Please try again.");
   }
 
   return { recipes };

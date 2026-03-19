@@ -36,6 +36,29 @@ export const RECEIPT_EXTRACTION_JSON_SCHEMA = {
   },
 } as const;
 
+const RECEIPT_JUNK_PATTERNS = [
+  /\bsubtotal\b/i,
+  /\btotal\b/i,
+  /\btax\b/i,
+  /\bvat\b/i,
+  /\bchange\b/i,
+  /\bcash\b/i,
+  /\bpayment\b/i,
+  /\bdebit\b/i,
+  /\bcredit\b/i,
+  /\bcard\b/i,
+  /\bloyalty\b/i,
+  /\breward\b/i,
+  /\bpoints?\b/i,
+  /\bcashier\b/i,
+  /\bthank you\b/i,
+  /\btransaction\b/i,
+  /\bauth(entication|orization)?\b/i,
+  /\bphone\b/i,
+  /\baddress\b/i,
+  /\breceipt\b/i,
+];
+
 function collapseWhitespace(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -52,12 +75,22 @@ function normalizeQuantity(value: number | null) {
 }
 
 function normalizeItemName(name: string) {
-  return collapseWhitespace(name).replace(/^[\s\-*.,:;]+/, "").trim();
+  return collapseWhitespace(name)
+    .replace(/^[\s\-*.,:;]+/, "")
+    .replace(/\s+[$€£]?\d+[.,]\d{2}$/, "")
+    .trim();
+}
+
+function isReceiptJunkLine(name: string) {
+  if (!name) return true;
+  if (/^\d{6,}$/.test(name)) return true;
+  return RECEIPT_JUNK_PATTERNS.some((pattern) => pattern.test(name));
 }
 
 function normalizeItem(item: ReceiptExtractionItem): ReceiptExtractionItem | null {
   const name = normalizeItemName(item.name);
   if (!name) return null;
+  if (isReceiptJunkLine(name)) return null;
 
   return {
     name,

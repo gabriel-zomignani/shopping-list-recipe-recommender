@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
-import { generateRecipesWithOllama } from "@/lib/recipes/ollama";
+import { generateRecipesWithOpenRouter } from "@/lib/recipes/openrouter";
 import { isRecipeGenerationRequest } from "@/lib/recipes/schema";
 
 export const runtime = "nodejs";
+
+function toPublicRecipeError(message: string) {
+  if (message.includes("OPENROUTER_API_KEY")) {
+    return "Recipe AI service is not configured on this server.";
+  }
+
+  return message;
+}
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -31,11 +39,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await generateRecipesWithOllama(body);
+    const result = await generateRecipesWithOpenRouter(body);
     return NextResponse.json(result);
   } catch (error) {
-    const message =
+    const rawMessage =
       error instanceof Error ? error.message : "Recipe generation failed unexpectedly.";
+    const message = toPublicRecipeError(rawMessage);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
