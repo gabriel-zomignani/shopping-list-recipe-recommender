@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import ReceiptUpload from "@/components/receipt/ReceiptUpload";
+import { requestReceiptExtraction } from "@/lib/receipt/api";
 import type {
   ReceiptExtractionResult,
   ReceiptImportItem,
@@ -22,12 +23,6 @@ function buildReviewItems(items: ReceiptExtractionResult["items"]): ReceiptRevie
     quantity: item.quantity,
     unit: item.unit,
   }));
-}
-
-function isErrorPayload(
-  value: ReceiptExtractionResult | { error?: string }
-): value is { error?: string } {
-  return "error" in value;
 }
 
 export default function ReceiptReviewModal({ isOpen, onClose, onAdd }: Props) {
@@ -57,29 +52,11 @@ export default function ReceiptReviewModal({ isOpen, onClose, onAdd }: Props) {
   }
 
   async function handleExtract(file: File) {
-    const formData = new FormData();
-    formData.set("receipt", file);
-
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/receipt", {
-        method: "POST",
-        body: formData,
-      });
-      const payload = (await response.json()) as ReceiptExtractionResult | { error?: string };
-
-      if (!response.ok) {
-        const message = isErrorPayload(payload)
-          ? payload.error || "Receipt extraction failed."
-          : "Receipt extraction failed.";
-        throw new Error(message);
-      }
-
-      if (isErrorPayload(payload)) {
-        throw new Error(payload.error || "Receipt extraction failed.");
-      }
+      const payload = await requestReceiptExtraction(file);
 
       setExtracted(payload);
       setItems(buildReviewItems(payload.items));
